@@ -1151,6 +1151,7 @@ ARGP_PROGRAM_VERSION_HOOK_DEF = dwarves_print_version;
 #define ARG_padding		   348
 #define ARGP_with_embedded_flexible_array 349
 #define ARGP_btf_attributes	   350
+#define ARGP_use_libctf		   351
 
 /* --btf_features=feature1[,feature2,..] allows us to specify
  * a list of requested BTF features or "default" to enable all default
@@ -1811,6 +1812,11 @@ static const struct argp_option pahole__options[] = {
 		.doc  = "Allow generation of attributes in BTF. Attributes are the type tags and decl tags with the kind_flag set to 1.",
 	},
 	{
+		.name = "use_libctf",
+		.key  = ARGP_use_libctf,
+		.doc  = "DEBUG: Use libctf to load compiler generated BTF information.",
+	},
+	{
 		.name = NULL,
 	}
 };
@@ -2005,6 +2011,8 @@ static error_t pahole__options_parser(int key, char *arg,
 		parse_btf_features(arg, true);		break;
 	case ARGP_btf_attributes:
 		conf_load.btf_attributes = true;	break;
+	case ARGP_use_libctf:
+		using_libctf = true;		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -3565,7 +3573,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (base_btf_file) {
+	if (base_btf_file && !using_libctf) {
 		conf_load.base_btf = btf__parse(base_btf_file, NULL);
 		if (libbpf_get_error(conf_load.base_btf)) {
 			fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
@@ -3577,6 +3585,9 @@ int main(int argc, char *argv[])
 			conf_load.format_path = "btf";
 		}
 	}
+
+	if (using_libctf)
+		conf_load.format_path = "libctf";
 
 	cus = cus__new();
 	if (cus == NULL) {
@@ -3609,11 +3620,14 @@ try_sole_arg_as_class_names:
 		    strstarts(filename, "/sys/kernel/btf/") &&
 		    strstr(filename, "/vmlinux") == NULL) {
 			base_btf_file = vmlinux_path__btf_filename();
-			conf_load.base_btf = btf__parse(base_btf_file, NULL);
-			if (libbpf_get_error(conf_load.base_btf)) {
-				fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
-					base_btf_file, libbpf_get_error(conf_load.base_btf));
-				goto out;
+
+			if (!using_libctf) {
+				conf_load.base_btf = btf__parse(base_btf_file, NULL);
+				if (libbpf_get_error(conf_load.base_btf)) {
+					fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
+						base_btf_file, libbpf_get_error(conf_load.base_btf));
+					goto out;
+				}
 			}
 		}
 	}
