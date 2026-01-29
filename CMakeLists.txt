@@ -40,8 +40,6 @@ set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror -ggdb -O0")
 set(CMAKE_C_FLAGS_RELEASE "-Wall -O2")
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=unused-but-set-variable")
-
 if (NOT DEFINED BUILD_SHARED_LIBS)
 	set (BUILD_SHARED_LIBS ON)
 	message(STATUS "Setting BUILD_SHARED_LIBS = ${BUILD_SHARED_LIBS}")
@@ -108,7 +106,7 @@ if (NOT LIBBPF_FOUND)
 endif()
 
 set(dwarves_LIB_SRCS dwarves.c dwarves_fprintf.c gobuffer.c
-		     btf_encoder.c btf_loader.c
+		     btf_encoder.c btf_loader.c libctf_loader.c
 		     dwarf_loader.c dutil.c elf_symtab.c rbtree.c)
 if (NOT LIBBPF_FOUND)
 	list(APPEND dwarves_LIB_SRCS $<TARGET_OBJECTS:bpf>)

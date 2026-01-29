@@ -32,6 +32,8 @@ static struct btf_encoder *btf_encoder;
 static char *detached_btf_filename;
 struct cus *cus;
 static bool btf_encode;
+static bool ctf_encode;
+static bool using_libctf;
 static bool sort_output;
 static bool need_resort;
 static bool first_obj_only;
@@ -2013,7 +2015,7 @@ static error_t pahole__options_parser(int key, char *arg,
 	case ARGP_btf_attributes:
 		conf_load.btf_attributes = true;	break;
 	case ARGP_use_libctf:
-		use_libctf = true;					break;
+		using_libctf = true;		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -3574,10 +3576,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (base_btf_file)
-		conf_load.base_btf_file = base_btf_file;
-
-	if (base_btf_file && !use_libctf) {
+	if (base_btf_file && !using_libctf) {
 		conf_load.base_btf = btf__parse(base_btf_file, NULL);
 		if (libbpf_get_error(conf_load.base_btf)) {
 			fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
@@ -3590,7 +3589,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (use_libctf)
+	if (using_libctf)
 		conf_load.format_path = "libctf";
 
 	cus = cus__new();
@@ -3625,7 +3624,7 @@ try_sole_arg_as_class_names:
 		    strstr(filename, "/vmlinux") == NULL) {
 			base_btf_file = vmlinux_path__btf_filename();
 
-			if (!use_libctf) {
+			if (!using_libctf) {
 				conf_load.base_btf = btf__parse(base_btf_file, NULL);
 				if (libbpf_get_error(conf_load.base_btf)) {
 					fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
