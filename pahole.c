@@ -26,14 +26,12 @@
 #include "dwarves.h"
 #include "dwarves_emit.h"
 #include "dutil.h"
-//#include "ctf_encoder.h" FIXME: disabled, probably its better to move to Oracle's libctf
 #include "btf_encoder.h"
 
 static struct btf_encoder *btf_encoder;
 static char *detached_btf_filename;
 struct cus *cus;
 static bool btf_encode;
-static bool ctf_encode;
 static bool sort_output;
 static bool need_resort;
 static bool first_obj_only;
@@ -1592,11 +1590,6 @@ static const struct argp_option pahole__options[] = {
 		.doc  = "change the arch word size to WORD_SIZE"
 	},
 	{
-		.name = "ctf_encode",
-		.key  = 'Z',
-		.doc  = "Encode as CTF: DISABLED, consider helping porting to libctf",
-	},
-	{
 		.name = "flat_arrays",
 		.key  = ARGP_flat_arrays,
 		.doc  = "Flat arrays",
@@ -1910,7 +1903,6 @@ static error_t pahole__options_parser(int key, char *arg,
 		if (!global_verbose)
 			formatter = class_name_formatter;
 		break;
-	// case 'Z': ctf_encode = 1;			break; // FIXME: Disabled
 	case ARGP_compile:
 		  compilable = true;
                   type_emissions__init(&emissions, &conf);
@@ -3220,19 +3212,6 @@ static enum load_steal_kind pahole_stealer(struct cu *cu, struct conf_load *conf
 	if (btf_encode) {
 		return pahole_stealer__btf_encode(cu, conf_load);
 	}
-#if 0
-	if (ctf_encode) {
-		cu__encode_ctf(cu, global_verbose);
-		/*
-		 * We still have to get the type signature code merged to eliminate
-		 * dups, reference another CTF file, etc, so for now just encode the
-		 * first cu that is let thru by cu__filter.
-		 *
-		 * FIXME: Disabled, should use Oracle's libctf
-		 */
-		return LSK__ABORT;
-	}
-#endif
 	if (class_name == NULL) {
 		if (stats_formatter == nr_methods_formatter) {
 			cu__account_nr_methods(cu);
@@ -3593,7 +3572,7 @@ int main(int argc, char *argv[])
 				base_btf_file, libbpf_get_error(conf_load.base_btf));
 			goto out;
 		}
-		if (!btf_encode && !ctf_encode) {
+		if (!btf_encode) {
 			// Force "btf" since a btf_base is being informed
 			conf_load.format_path = "btf";
 		}
@@ -3641,7 +3620,7 @@ try_sole_arg_as_class_names:
 
 	err = cus__load_files(cus, &conf_load, argv + remaining);
 	if (err != 0) {
-		if (class_name == NULL && !btf_encode && !ctf_encode) {
+		if (class_name == NULL && !btf_encode) {
 			class_name = argv[remaining];
 
 			if (class_name == NULL) {
@@ -3658,7 +3637,7 @@ try_sole_arg_as_class_names:
 			goto try_sole_arg_as_class_names;
 		}
 
-		if (btf_encode || ctf_encode) {
+		if (btf_encode) {
 			// If encoding is asked for and there is no DEBUG info to encode from,
 			// there are no errors, continue...
 			goto out_ok;
