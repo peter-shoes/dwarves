@@ -639,7 +639,7 @@ static void libctf__errwarn(ctf_dict_t *fp)
 
 static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const char *filename)
 {
-	ctf_dict_t *link = NULL, *fp;
+	ctf_dict_t *link = NULL, *fp, *against_dict = NULL;
 	ctf_archive_t *ctf, *against = NULL, *linked;
 	ctf_error_t err = -1;
 	unsigned char *out;
@@ -671,7 +671,7 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	if (ctf_version(0, sizeof(struct btf_header), LIBCTF_BTM_BTF) < 0)
 		goto ctf_err;
 
-	if ((link = ctf_create(&err)) == NULL)
+	if ((link = ctf_create(NULL, &err)) == NULL)
 		goto create_err;
 
 	// BTF is less strict about duplicate enums than CTF.
@@ -715,7 +715,18 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	ctf_arc_close(ctf);
 
 	s.cts_data = (void *) out;
-	if ((linked = ctf_arc_bufopen(&s, NULL, NULL, &err)) == NULL)
+
+	if (getenv("PAHOLE_AGAINST") != NULL) {
+		if ((against_dict = ctf_dict_open(against, NULL,
+						  &err)) == NULL)
+			goto open_err;
+	}
+
+	if ((linked = ctf_arc_bufopen(&s, NULL, NULL,
+				      &err)) == NULL)
+		goto open_err;
+
+	if (ctf_arc_set_parent(linked, against_dict) < 0)
 		goto open_err;
 
 	/*
@@ -724,6 +735,8 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	 */
 	if ((fp = ctf_dict_open(linked, NULL, &err)) == NULL)
 		goto open_err;
+
+	ctf_dict_close(against_dict);
 
 	// hold the dict for the cu
 	cu->ctf_fp = fp;
