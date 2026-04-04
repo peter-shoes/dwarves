@@ -678,10 +678,10 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	if (ctf_dict_set_flag(link, CTF_STRICT_NO_DUP_ENUMERATORS, 0) < 0)
 		goto link_err;
 
-	if (getenv("PAHOLE_AGAINST") != NULL) {
+	if (conf->base_btf_file != NULL) {
 
-		if ((against = ctf_open(getenv("PAHOLE_AGAINST"), NULL, &err)) == NULL) {
-			filename = getenv("PAHOLE_AGAINST");
+		if ((against = ctf_open(conf->base_btf_file, NULL, &err)) == NULL) {
+			filename = conf->base_btf_file;
 			goto open_err;
 		}
 
@@ -716,7 +716,7 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 
 	s.cts_data = (void *) out;
 
-	if (getenv("PAHOLE_AGAINST") != NULL) {
+	if (conf->base_btf_file != NULL) {
 		if ((against_dict = ctf_dict_open(against, NULL,
 						  &err)) == NULL)
 			goto open_err;

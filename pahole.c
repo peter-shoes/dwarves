@@ -3574,6 +3574,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (base_btf_file)
+		conf_load.base_btf_file = base_btf_file;
+
 	if (base_btf_file && !use_libctf) {
 		conf_load.base_btf = btf__parse(base_btf_file, NULL);
 		if (libbpf_get_error(conf_load.base_btf)) {

@@ -107,6 +107,7 @@ struct conf_load {
 	uint16_t		kabi_prefix_len;
 	const char		*kabi_prefix;
 	struct btf		*base_btf;
+	const char		*base_btf_file;
 	struct conf_fprintf	*conf_fprintf;
 };
 
