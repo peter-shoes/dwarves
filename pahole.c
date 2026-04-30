@@ -32,12 +32,10 @@ static struct btf_encoder *btf_encoder;
 static char *detached_btf_filename;
 struct cus *cus;
 static bool btf_encode;
-static bool ctf_encode;
 static bool sort_output;
 static bool need_resort;
 static bool first_obj_only;
 static bool show_running_kernel_vmlinux;
-static bool use_libctf;
 static const char *base_btf_file;
 
 static const char *prettify_input_filename;
@@ -1153,7 +1151,6 @@ ARGP_PROGRAM_VERSION_HOOK_DEF = dwarves_print_version;
 #define ARG_padding		   348
 #define ARGP_with_embedded_flexible_array 349
 #define ARGP_btf_attributes	   350
-#define ARGP_use_libctf		   351
 
 /* --btf_features=feature1[,feature2,..] allows us to specify
  * a list of requested BTF features or "default" to enable all default
@@ -1814,11 +1811,6 @@ static const struct argp_option pahole__options[] = {
 		.doc  = "Allow generation of attributes in BTF. Attributes are the type tags and decl tags with the kind_flag set to 1.",
 	},
 	{
-		.name = "use_libctf",
-		.key  = ARGP_use_libctf,
-		.doc  = "DEBUG: Use libctf to load compiler generated BTF information.",
-	},
-	{
 		.name = NULL,
 	}
 };
@@ -2013,8 +2005,6 @@ static error_t pahole__options_parser(int key, char *arg,
 		parse_btf_features(arg, true);		break;
 	case ARGP_btf_attributes:
 		conf_load.btf_attributes = true;	break;
-	case ARGP_use_libctf:
-		using_libctf = true;		break;
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -3575,7 +3565,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (base_btf_file && !using_libctf) {
+	if (base_btf_file && !(strcmp(conf_load.format_path, "libctf"))) {
 		conf_load.base_btf = btf__parse(base_btf_file, NULL);
 		if (libbpf_get_error(conf_load.base_btf)) {
 			fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
@@ -3588,8 +3578,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (use_libctf) {
-		conf_load.format_path = "libctf";
+	if (strcmp(conf_load.format_path, "libctf")) {
 		conf_load.btf_no_dedup = true;
 	}
 
@@ -3629,7 +3618,7 @@ try_sole_arg_as_class_names:
 		    strstr(filename, "/vmlinux") == NULL) {
 			base_btf_file = vmlinux_path__btf_filename();
 
-			if (!using_libctf) {
+			if (!(strcmp(conf_load.format_path, "libctf"))) {
 				conf_load.base_btf = btf__parse(base_btf_file, NULL);
 				if (libbpf_get_error(conf_load.base_btf)) {
 					fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
