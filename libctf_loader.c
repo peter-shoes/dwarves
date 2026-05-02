@@ -35,6 +35,7 @@
 
 #include <ctf-api.h>
 
+// #include "btf_encoder.h"
 #include "dutil.h"
 #include "dwarves.h"
 
@@ -663,7 +664,7 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	ctf_dict_t *link = NULL, *fp, *against_dict = NULL;
 	ctf_archive_t *ctf, *against = NULL, *linked;
 	ctf_error_t err = -1;
-	int fd;
+	int fd, i;
 	unsigned char *out;
 	ctf_sect_t s = {0};
 	int is_btf;
@@ -775,12 +776,18 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	if (err != 0)
 		goto out_free;
 
-	/*
-	 * The app stole this cu, possibly deleting it,
-	 * so forget about it
-	 */
-	if (conf && conf->steal && conf->steal(cu, conf))
-		return 0;
+	if (conf && conf->steal)
+		conf->steal(cu, conf);
+	else
+		goto encode_err;
+	
+	// Now we have the kfuncs from the btf_encoder relating to this CU
+	// Let's process these
+	for (i=0; i < cu->encoder_func_states->cnt; i++) {
+		fprintf(stderr, "FUNC: %d, %s\n", i, cu->encoder_func_states->array[i].elf->name);
+	}
+
+	// btf_encoder_delete(&(cu->btf_encoder));
 
 	// add newly created cu
 	cus__add(cus, cu);
@@ -788,6 +795,8 @@ static int cus__load_btf_libctf(struct cus *cus, struct conf_load *conf, const c
 	elf_end(elf);
 	return err;
 
+encode_err:
+	fprintf(stderr, "No stealer available to encode kfuncs!");
 out_free:
 	cu__delete(cu); // will call btf__free(cu->priv);
 	close(fd);

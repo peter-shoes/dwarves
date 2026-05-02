@@ -2913,7 +2913,7 @@ static int cus__load_running_kernel(struct cus *cus, struct conf_load *conf)
 	if (!conf || conf->format_path == NULL)
 		goto try_btf;
 
-	if (strstr(conf->format_path, "libctf")) {
+	if (strcmp(conf->format_path, "libctf") == 0) {
 		fprintf(stderr, "Format path is libctf\n");
 		goto try_libctf;
 	}

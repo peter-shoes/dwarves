@@ -172,6 +172,51 @@ struct conf_fprintf {
 	uint8_t    skip_validate_padding:1;
 };
 
+struct elf_function_sym {
+	const char *name;
+	uint64_t addr;
+};
+
+struct elf_function {
+	char		*name;
+	struct elf_function_sym *syms;
+	uint16_t	sym_cnt;
+	uint16_t 	ambiguous_addr:1;
+	uint16_t	kfunc:1;
+	uint32_t	kfunc_flags;
+};
+
+struct btf_encoder_func_parm {
+	int name_off;
+	uint32_t type_id;
+};
+
+struct btf_encoder_func_annot {
+	int value;
+	int16_t component_idx;
+};
+
+struct btf_encoder_func_state {
+	struct elf_function *elf;
+	uint32_t type_id_off;
+	uint16_t nr_parms;
+	uint16_t nr_annots;
+	uint8_t optimized_parms:1;
+	uint8_t unexpected_reg:1;
+	uint8_t inconsistent_proto:1;
+	uint8_t uncertain_parm_loc:1;
+	uint8_t ambiguous_addr:1;
+	int ret_type_id;
+	struct btf_encoder_func_parm *parms;
+	struct btf_encoder_func_annot *annots;
+};
+
+struct func_states {
+	struct btf_encoder_func_state *array;
+	int cnt;
+	int cap;
+};
+
 struct cus;
 
 struct cus *cus__new(void);
@@ -319,6 +364,8 @@ struct cu {
 	int		 build_id_len;
 	unsigned char	 build_id[0];
 	ctf_dict_t	 *ctf_fp;
+	struct func_states *encoder_func_states;
+
 };
 
 struct cu *cu__new(const char *name, uint8_t addr_size,

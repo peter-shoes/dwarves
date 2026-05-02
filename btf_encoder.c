@@ -34,6 +34,8 @@
 #include <search.h> /* for tsearch(), tfind() and tdestroy() */
 #include <pthread.h>
 
+#include <ctf-api.h>
+
 #define BTF_BASE_ELF_SEC	".BTF.base"
 #define BTF_IDS_SECTION		".BTF_ids"
 #define BTF_ID_FUNC_PFX		"__BTF_ID__func__"
@@ -48,6 +50,8 @@
 #define KF_ARENA_RET  (1 << 13)
 #define KF_ARENA_ARG1 (1 << 14)
 #define KF_ARENA_ARG2 (1 << 15)
+
+static bool using_libctf;
 
 struct btf_id_and_flag {
 	uint32_t id;
@@ -65,46 +69,6 @@ struct btf_id_set8 {
         uint32_t cnt;
         uint32_t flags;
 	struct btf_id_and_flag pairs[];
-};
-
-struct btf_encoder_func_parm {
-	int name_off;
-	uint32_t type_id;
-};
-
-struct btf_encoder_func_annot {
-	int value;
-	int16_t component_idx;
-};
-
-/* state used to do later encoding of saved functions */
-struct btf_encoder_func_state {
-	struct elf_function *elf;
-	uint32_t type_id_off;
-	uint16_t nr_parms;
-	uint16_t nr_annots;
-	uint8_t optimized_parms:1;
-	uint8_t unexpected_reg:1;
-	uint8_t inconsistent_proto:1;
-	uint8_t uncertain_parm_loc:1;
-	uint8_t ambiguous_addr:1;
-	int ret_type_id;
-	struct btf_encoder_func_parm *parms;
-	struct btf_encoder_func_annot *annots;
-};
-
-struct elf_function_sym {
-	const char *name;
-	uint64_t addr;
-};
-
-struct elf_function {
-	char		*name;
-	struct elf_function_sym *syms;
-	uint16_t	sym_cnt;
-	uint16_t 	ambiguous_addr:1;
-	uint16_t	kfunc:1;
-	uint32_t	kfunc_flags;
 };
 
 struct elf_secinfo {
@@ -1247,6 +1211,7 @@ static bool elf_function__has_ambiguous_address(struct elf_function *func)
 
 static int32_t btf_encoder__save_func(struct btf_encoder *encoder, struct function *fn, struct elf_function *func)
 {
+	return 0;
 	struct btf_encoder_func_state *state = btf_encoder__alloc_func_state(encoder);
 	struct ftype *ftype = &fn->proto;
 	struct btf *btf = encoder->btf;
@@ -1272,21 +1237,21 @@ static int32_t btf_encoder__save_func(struct btf_encoder *encoder, struct functi
 	state->unexpected_reg = ftype->unexpected_reg;
 	state->optimized_parms = ftype->optimized_parms;
 	state->uncertain_parm_loc = ftype->uncertain_parm_loc;
-	ftype__for_each_parameter(ftype, param) {
-		const char *name = parameter__name(param) ?: "";
+		ftype__for_each_parameter(ftype, param) {
+			const char *name = parameter__name(param) ?: "";
 
-		str_off = btf__add_str(btf, name);
-		if (str_off < 0) {
-			err = str_off;
-			goto out;
+			str_off = btf__add_str(btf, name);
+			if (str_off < 0) {
+				err = str_off;
+				goto out;
+			}
+			state->parms[param_idx].name_off = str_off;
+			state->parms[param_idx].type_id = param->tag.type == 0 ? 0 :
+							encoder->type_id_off + param->tag.type;
+			param_idx++;
 		}
-		state->parms[param_idx].name_off = str_off;
-		state->parms[param_idx].type_id = param->tag.type == 0 ? 0 :
-						  encoder->type_id_off + param->tag.type;
-		param_idx++;
-	}
-	if (ftype->unspec_parms)
-		state->parms[param_idx].type_id = 0;
+		if (ftype->unspec_parms)
+			state->parms[param_idx].type_id = 0;
 
 	list_for_each_entry(annot, &fn->annots, node)
 		state->nr_annots++;
@@ -2731,6 +2696,9 @@ int btf_encoder__encode_cu(struct btf_encoder *encoder, struct cu *cu, struct co
 	struct function *fn;
 	struct tag *pos;
 	int err = 0;
+	using_libctf = (strcmp(conf_load->format_path, "libctf") == 0);
+
+	fprintf(stderr, "BTF encoder conf load: %s\n", conf_load->format_path);
 
 	encoder->cu = cu;
 	funcs = btf_encoder__elf_functions(encoder);
@@ -2753,6 +2721,12 @@ int btf_encoder__encode_cu(struct btf_encoder *encoder, struct cu *cu, struct co
 			encoder->array_index_id = encoder->type_id_off + cu->types_table.nr_entries;
 		}
 	}
+
+	// If this is happening in the context of reading BTF using libctf,
+	// we only need the functions to convert to kfuncs,
+	// so skip everything else
+	if (using_libctf)
+		goto save_func;
 
 	cu__for_each_type(cu, core_id, pos) {
 		btf_type_id = btf_encoder__encode_tag(encoder, pos, conf_load);
@@ -2809,6 +2783,7 @@ int btf_encoder__encode_cu(struct btf_encoder *encoder, struct cu *cu, struct co
 		}
 	}
 
+save_func:
 	cu__for_each_function(cu, core_id, fn) {
 		struct elf_function *func = NULL;
 
@@ -2823,8 +2798,9 @@ int btf_encoder__encode_cu(struct btf_encoder *encoder, struct cu *cu, struct co
 		 */
 		if (fn->declaration)
 			continue;
-		if (!ftype__has_arg_names(&fn->proto))
-			continue;
+		if (!using_libctf)
+			if (!ftype__has_arg_names(&fn->proto))
+				continue;
 		if (funcs->cnt) {
 			const char *name;
 
@@ -2844,14 +2820,22 @@ int btf_encoder__encode_cu(struct btf_encoder *encoder, struct cu *cu, struct co
 		}
 		if (!func)
 			continue;
-
-		if (ftype__has_uncertain_arg_loc(cu, &fn->proto))
-			fn->proto.uncertain_parm_loc = 1;
+		if (!using_libctf)
+			if (ftype__has_uncertain_arg_loc(cu, &fn->proto))
+				fn->proto.uncertain_parm_loc = 1;
 
 		err = btf_encoder__save_func(encoder, fn, func);
+		// err=0;
 		if (err)
 			goto out;
 	}
+	// if (using_libctf) {
+	// 	for (i=0; i < encoder->func_states.cnt; i++) {
+	// 		cu->encoder_func_states->array = encoder->func_states.array;
+	// 		cu->encoder_func_states->cnt = encoder->func_states.cnt;
+	// 		cu->encoder_func_states->cap = encoder->func_states.cap;
+	// 	}
+	// }
 
 	if (encoder->encode_vars)
 		err = btf_encoder__encode_cu_variables(encoder);

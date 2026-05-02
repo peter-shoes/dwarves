@@ -3147,7 +3147,7 @@ out:
 static enum load_steal_kind pahole_stealer__btf_encode(struct cu *cu, struct conf_load *conf_load)
 {
 	int err;
-
+// add bool to wipe encoder
 	if (!btf_encoder)
 		btf_encoder = btf_encoder__new(cu,
 				       detached_btf_filename,
@@ -3565,7 +3565,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (base_btf_file && !(strcmp(conf_load.format_path, "libctf"))) {
+	if (base_btf_file && (strcmp(conf_load.format_path, "libctf") != 0)) {
 		conf_load.base_btf = btf__parse(base_btf_file, NULL);
 		if (libbpf_get_error(conf_load.base_btf)) {
 			fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
@@ -3578,12 +3578,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (strcmp(conf_load.format_path, "libctf")) {
-		conf_load.btf_no_dedup = true;
-	}
-
 	if (strcmp(conf_load.format_path, "libctf") == 0) {
 		conf.skip_validate_padding = 1;
+		conf_load.btf_no_dedup = true;
 	}
 
 	cus = cus__new();
@@ -3618,7 +3615,7 @@ try_sole_arg_as_class_names:
 		    strstr(filename, "/vmlinux") == NULL) {
 			base_btf_file = vmlinux_path__btf_filename();
 
-			if (!(strcmp(conf_load.format_path, "libctf"))) {
+			if ((strcmp(conf_load.format_path, "libctf") != 0)) {
 				conf_load.base_btf = btf__parse(base_btf_file, NULL);
 				if (libbpf_get_error(conf_load.base_btf)) {
 					fprintf(stderr, "Failed to parse base BTF '%s': %ld\n",
@@ -3708,6 +3705,7 @@ try_sole_arg_as_class_names:
 	header = NULL;
 
 	if (btf_encode && btf_encoder) { // maybe all CUs were filtered out and thus we don't have an encoder?
+		fprintf(stderr, "btf encoder running\n");
 		err = btf_encoder__encode(btf_encoder, &conf_load);
 		btf_encoder__delete(btf_encoder);
 		if (err) {
